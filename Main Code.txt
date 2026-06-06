@@ -1,0 +1,97 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Pins
+#define trigPin 12
+#define echoPin 13
+#define buzzer 8
+
+const int maxTankDepth = 15;
+const int buzzerThreshold = 70;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+bool buzzerTriggered = false;
+int lastLevel = 0;
+
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(buzzer, OUTPUT);
+
+  lcd.begin(16, 2);
+  lcd.backlight();
+
+  lcd.print("Water Level");
+  delay(2000);
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  long total = 0;
+  int distance;
+
+  // Stable readings
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+
+    long duration = pulseIn(echoPin, HIGH, 30000);
+    int d = duration * 0.034 / 2;
+
+    if (d > 2 && d < maxTankDepth + 2) {
+      total += d;
+    } else {
+      total += maxTankDepth;
+    }
+
+    delay(30);
+  }
+
+  distance = total / 10;
+
+  int waterLevel = map(distance, 3, maxTankDepth, 100, 0);
+  waterLevel = constrain(waterLevel, 0, 100);
+
+  // Smooth display
+  if (abs(waterLevel - lastLevel) < 10) {
+    waterLevel = lastLevel;
+  }
+
+  lastLevel = waterLevel;
+
+  // LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Level: ");
+  lcd.print(waterLevel);
+  lcd.print("%");
+
+  lcd.setCursor(0, 1);
+  int bars = map(waterLevel, 0, 100, 0, 16);
+  for (int i = 0; i < bars; i++) {
+    lcd.print("|");
+  }
+
+  // 🔊 LOUD BEEP PATTERN
+  if (waterLevel >= buzzerThreshold && !buzzerTriggered) {
+    for (int i = 0; i < 6; i++) {
+      tone(buzzer, 2500); // high freq = louder
+      delay(200);
+      noTone(buzzer);
+      delay(150);
+    }
+    buzzerTriggered = true;
+  }
+
+  // Reset
+  if (waterLevel < buzzerThreshold) {
+    buzzerTriggered = false;
+  }
+
+  delay(400);
+}
